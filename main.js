@@ -11,18 +11,22 @@ gradient.addColorStop(0.5, '#cccccc');
 gradient.addColorStop(1, '#888888');
 
 class Particle {
-    constructor(effect, x, y, color) {
+    constructor(effect, x, y, brightness) {
         this.effect = effect;
         // Start very close to the target position
         const offsetAngle = Math.random() * Math.PI * 2;
-        const offsetDistance = Math.random() * 20 + 5;
+        const offsetDistance = Math.random() * 15 + 3;
         this.x = x + Math.cos(offsetAngle) * offsetDistance;
         this.y = y + Math.sin(offsetAngle) * offsetDistance;
-        this.color = color;
-
+        this.color = '#999999';
+        
         // Target position to fly to
         this.targetX = x;
         this.targetY = y;
+        
+        // Brightness determines which character to use (0-1 range)
+        this.targetBrightness = brightness;
+        this.brightness = brightness;
 
         this.size = this.effect.gap;
         this.dx = 0;
@@ -32,13 +36,19 @@ class Particle {
         this.force = 0;
         this.angle = 0;
         this.distance = 0;
-        this.friction = 0.7; // Moderate friction
-        this.ease = 0.25;   // Strong easing for quick convergence
-
-        // ASCII Logic
-        this.chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ!@#$%^&*()_+-=[]{}|;:,.<>?';
-        this.char = this.chars.charAt(Math.floor(Math.random() * this.chars.length));
+        this.friction = 0.7;
+        this.ease = 0.25;
         this.settled = false;
+
+        // Character palette ordered from light to dark
+        this.charPalette = ' .\',:;!*+|%S#@';
+        this.char = this.getCharForBrightness(brightness);
+    }
+
+    getCharForBrightness(brightness) {
+        // Map brightness (0-1) to character palette
+        const index = Math.floor(brightness * (this.charPalette.length - 1));
+        return this.charPalette[Math.max(0, Math.min(index, this.charPalette.length - 1))];
     }
 
     update() {
@@ -46,11 +56,16 @@ class Particle {
         this.dy = this.targetY - this.y;
         this.distance = this.dx * this.dx + this.dy * this.dy;
         
+        // Smooth brightness transition
+        const brightnessDiff = this.targetBrightness - this.brightness;
+        this.brightness += brightnessDiff * 0.15;
+        
         // If very close to target, stop moving
         if (this.distance < 4) {
             this.settled = true;
             this.x = this.targetX;
             this.y = this.targetY;
+            this.brightness = this.targetBrightness;
             this.vx = 0;
             this.vy = 0;
             return;
@@ -69,7 +84,7 @@ class Particle {
     }
 
     draw() {
-        // No character changes - keep it stable
+        this.char = this.getCharForBrightness(this.brightness);
         this.effect.context.fillStyle = this.color;
         this.effect.context.font = this.size + 'px monospace';
         this.effect.context.fillText(this.char, this.x, this.y);
@@ -126,15 +141,19 @@ class Effect {
         offCtx.textBaseline = 'middle';
         offCtx.fillText(text, this.textX, this.textY);
 
-        const pixels = offCtx.getImageData(0, 0, this.canvasWidth, this.canvasHeight).data;
+        const imageData = offCtx.getImageData(0, 0, this.canvasWidth, this.canvasHeight);
+        const pixels = imageData.data;
         const coordinates = [];
 
+        // First pass: collect all coordinates
         for (let y = 0; y < this.canvasHeight; y += this.gap) {
             for (let x = 0; x < this.canvasWidth; x += this.gap) {
                 const index = (y * this.canvasWidth + x) * 4;
                 const alpha = pixels[index + 3];
                 if (alpha > 0) {
-                    coordinates.push({ x, y });
+                    // Map alpha to brightness (0-1, with edges darker)
+                    const brightness = Math.min(1, alpha / 255 * 0.8);
+                    coordinates.push({ x, y, brightness });
                 }
             }
         }
@@ -275,15 +294,34 @@ class Effect {
         
         this.drawShape(offCtx, shapeName);
         
-        const pixels = offCtx.getImageData(0, 0, this.canvasWidth, this.canvasHeight).data;
+        const imageData = offCtx.getImageData(0, 0, this.canvasWidth, this.canvasHeight);
+        const pixels = imageData.data;
         const coordinates = [];
 
+        // Calculate distance field for edge detection
         for (let y = 0; y < this.canvasHeight; y += this.gap) {
             for (let x = 0; x < this.canvasWidth; x += this.gap) {
                 const index = (y * this.canvasWidth + x) * 4;
                 const alpha = pixels[index + 3];
                 if (alpha > 0) {
-                    coordinates.push({ x, y });
+                    // Calculate distance to nearest non-filled pixel (edge detection)
+                    let minDist = 999;
+                    for (let dy = -15; dy <= 15; dy += this.gap) {
+                        for (let dx = -15; dx <= 15; dx += this.gap) {
+                            const nx = x + dx;
+                            const ny = y + dy;
+                            if (nx >= 0 && nx < this.canvasWidth && ny >= 0 && ny < this.canvasHeight) {
+                                const nIndex = (ny * this.canvasWidth + nx) * 4;
+                                if (pixels[nIndex + 3] === 0) {
+                                    const dist = Math.sqrt(dx * dx + dy * dy);
+                                    minDist = Math.min(minDist, dist);
+                                }
+                            }
+                        }
+                    }
+                    // Edges (near boundary) get darker characters, interior gets lighter
+                    const brightness = Math.min(1, Math.max(0.2, minDist / 20));
+                    coordinates.push({ x, y, brightness });
                 }
             }
         }
@@ -302,11 +340,14 @@ class Effect {
         for (let i = 0; i < coordinates.length; i++) {
             if (this.particles[i]) {
                 // Particle exists, update its target
-                this.particles[i].targetX = coordinates[i].x;
-                this.particles[i].targetY = coordinates[i].y;
+                const coord = coordinates[i];
+                this.particles[i].targetX = coord.x;
+                this.particles[i].targetY = coord.y;
+                this.particles[i].targetBrightness = coord.brightness;
             } else {
                 // Create new particle
-                this.particles.push(new Particle(this, coordinates[i].x, coordinates[i].y, '#999999'));
+                const coord = coordinates[i];
+                this.particles.push(new Particle(this, coord.x, coord.y, coord.brightness));
             }
         }
 
