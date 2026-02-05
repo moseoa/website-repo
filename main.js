@@ -13,9 +13,11 @@ gradient.addColorStop(1, '#888888');
 class Particle {
     constructor(effect, x, y, color) {
         this.effect = effect;
-        // Start at a random position initially
-        this.x = Math.random() * this.effect.canvasWidth;
-        this.y = Math.random() * this.effect.canvasHeight;
+        // Start very close to the target position
+        const offsetAngle = Math.random() * Math.PI * 2;
+        const offsetDistance = Math.random() * 20 + 5;
+        this.x = x + Math.cos(offsetAngle) * offsetDistance;
+        this.y = y + Math.sin(offsetAngle) * offsetDistance;
         this.color = color;
 
         // Target position to fly to
@@ -30,19 +32,31 @@ class Particle {
         this.force = 0;
         this.angle = 0;
         this.distance = 0;
-        this.friction = Math.random() * 0.9 + 0.05; // High friction for precise stopping
-        this.ease = Math.random() * 0.05 + 0.005;   // Low easing for smooth drift
+        this.friction = 0.7; // Moderate friction
+        this.ease = 0.25;   // Strong easing for quick convergence
 
         // ASCII Logic
         this.chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ!@#$%^&*()_+-=[]{}|;:,.<>?';
         this.char = this.chars.charAt(Math.floor(Math.random() * this.chars.length));
+        this.settled = false;
     }
 
     update() {
         this.dx = this.targetX - this.x;
         this.dy = this.targetY - this.y;
         this.distance = this.dx * this.dx + this.dy * this.dy;
-        this.force = -this.effect.mouse.radius / this.distance;
+        
+        // If very close to target, stop moving
+        if (this.distance < 4) {
+            this.settled = true;
+            this.x = this.targetX;
+            this.y = this.targetY;
+            this.vx = 0;
+            this.vy = 0;
+            return;
+        }
+        
+        this.force = -this.effect.mouse.radius / (this.distance + 1);
 
         if (this.distance < this.effect.mouse.radius) {
             this.angle = Math.atan2(this.dy, this.dx);
@@ -55,11 +69,7 @@ class Particle {
     }
 
     draw() {
-        // Change char occasionally for "digital noise" effect
-        if (Math.random() < 0.05) {
-            this.char = this.chars.charAt(Math.floor(Math.random() * this.chars.length));
-        }
-
+        // No character changes - keep it stable
         this.effect.context.fillStyle = this.color;
         this.effect.context.font = this.size + 'px monospace';
         this.effect.context.fillText(this.char, this.x, this.y);
@@ -74,7 +84,7 @@ class Effect {
         this.textX = this.canvasWidth / 2;
         this.textY = this.canvasHeight / 2;
         this.fontSize = 100;
-        this.gap = 14;
+        this.gap = 6;
 
         this.particles = [];
         this.mouse = {
@@ -137,68 +147,94 @@ class Effect {
         const ch = this.canvasHeight;
         const cx = cw / 2;
         const cy = ch / 2;
-        const scale = 80;
+        const scale = 120;
 
         offCtx.fillStyle = 'white';
         offCtx.strokeStyle = 'white';
-        offCtx.lineWidth = 3;
+        offCtx.lineWidth = 2;
 
         switch (shapeName) {
             case 'dog':
-                // Simple dog
+                // Detailed dog with more features
                 // Body
                 offCtx.beginPath();
-                offCtx.ellipse(cx, cy, scale, scale * 0.6, 0, 0, Math.PI * 2);
+                offCtx.ellipse(cx + 20, cy, scale * 1.2, scale * 0.8, 0, 0, Math.PI * 2);
                 offCtx.fill();
                 // Head
                 offCtx.beginPath();
-                offCtx.arc(cx - scale * 0.5, cy - scale * 0.6, scale * 0.4, 0, Math.PI * 2);
+                offCtx.arc(cx - scale * 0.6, cy - scale * 0.7, scale * 0.5, 0, Math.PI * 2);
                 offCtx.fill();
-                // Ears
+                // Snout
                 offCtx.beginPath();
-                offCtx.arc(cx - scale * 0.8, cy - scale, scale * 0.25, 0, Math.PI * 2);
+                offCtx.ellipse(cx - scale * 0.9, cy - scale * 0.4, scale * 0.3, scale * 0.25, 0, 0, Math.PI * 2);
                 offCtx.fill();
+                // Ears - left
                 offCtx.beginPath();
-                offCtx.arc(cx - scale * 0.15, cy - scale, scale * 0.25, 0, Math.PI * 2);
+                offCtx.ellipse(cx - scale * 1.0, cy - scale * 1.2, scale * 0.3, scale * 0.5, -0.3, 0, Math.PI * 2);
                 offCtx.fill();
+                // Ears - right
+                offCtx.beginPath();
+                offCtx.ellipse(cx - scale * 0.2, cy - scale * 1.15, scale * 0.3, scale * 0.5, 0.3, 0, Math.PI * 2);
+                offCtx.fill();
+                // Legs
+                for (let i = 0; i < 4; i++) {
+                    const legX = cx - scale * 0.2 + (i * scale * 0.35);
+                    const legY = cy + scale * 0.6;
+                    offCtx.beginPath();
+                    offCtx.ellipse(legX, legY, scale * 0.15, scale * 0.4, 0, 0, Math.PI * 2);
+                    offCtx.fill();
+                }
                 // Tail
                 offCtx.beginPath();
-                offCtx.arc(cx + scale * 0.8, cy, scale * 0.3, 0, Math.PI * 2);
+                offCtx.ellipse(cx + scale * 0.9, cy - scale * 0.2, scale * 0.25, scale * 0.6, 0.4, 0, Math.PI * 2);
                 offCtx.fill();
                 break;
             case 'cat':
-                // Simple cat
+                // Detailed cat with pointed ears
                 // Body
                 offCtx.beginPath();
-                offCtx.ellipse(cx, cy, scale, scale * 0.7, 0, 0, Math.PI * 2);
+                offCtx.ellipse(cx + 10, cy, scale * 1.1, scale * 0.75, 0, 0, Math.PI * 2);
                 offCtx.fill();
                 // Head
                 offCtx.beginPath();
-                offCtx.arc(cx - scale * 0.4, cy - scale * 0.7, scale * 0.35, 0, Math.PI * 2);
+                offCtx.arc(cx - scale * 0.55, cy - scale * 0.65, scale * 0.45, 0, Math.PI * 2);
                 offCtx.fill();
-                // Ears (triangular)
+                // Snout
                 offCtx.beginPath();
-                offCtx.moveTo(cx - scale * 0.65, cy - scale * 1.1);
-                offCtx.lineTo(cx - scale * 0.45, cy - scale * 0.9);
-                offCtx.lineTo(cx - scale * 0.5, cy - scale * 1.2);
+                offCtx.arc(cx - scale * 0.85, cy - scale * 0.45, scale * 0.2, 0, Math.PI * 2);
+                offCtx.fill();
+                // Ears - left (pointed)
+                offCtx.beginPath();
+                offCtx.moveTo(cx - scale * 0.8, cy - scale * 1.2);
+                offCtx.lineTo(cx - scale * 0.55, cy - scale * 0.75);
+                offCtx.lineTo(cx - scale * 0.95, cy - scale * 0.85);
                 offCtx.closePath();
                 offCtx.fill();
+                // Ears - right (pointed)
                 offCtx.beginPath();
-                offCtx.moveTo(cx - scale * 0.15, cy - scale * 1.1);
-                offCtx.lineTo(cx + scale * 0.05, cy - scale * 0.9);
-                offCtx.lineTo(cx - scale * 0.1, cy - scale * 1.2);
+                offCtx.moveTo(cx - scale * 0.3, cy - scale * 1.2);
+                offCtx.lineTo(cx - scale * 0.05, cy - scale * 0.75);
+                offCtx.lineTo(cx - scale * 0.45, cy - scale * 0.85);
                 offCtx.closePath();
                 offCtx.fill();
-                // Tail
+                // Legs
+                for (let i = 0; i < 4; i++) {
+                    const legX = cx - scale * 0.25 + (i * scale * 0.3);
+                    const legY = cy + scale * 0.55;
+                    offCtx.beginPath();
+                    offCtx.ellipse(legX, legY, scale * 0.12, scale * 0.35, 0, 0, Math.PI * 2);
+                    offCtx.fill();
+                }
+                // Tail (curved)
                 offCtx.beginPath();
-                offCtx.arc(cx + scale * 0.7, cy + scale * 0.2, scale * 0.35, 0, Math.PI * 2);
+                offCtx.ellipse(cx + scale * 0.8, cy - scale * 0.15, scale * 0.2, scale * 0.65, 0.5, 0, Math.PI * 2);
                 offCtx.fill();
                 break;
             case 'heart':
                 // Heart shape
                 const hx = cx;
                 const hy = cy;
-                const hs = scale * 0.8;
+                const hs = scale * 1.2;
                 offCtx.beginPath();
                 offCtx.moveTo(hx, hy + hs * 0.4);
                 offCtx.bezierCurveTo(hx - hs, hy - hs * 0.2, hx - hs, hy - hs * 0.6, hx - hs * 0.3, hy - hs * 0.6);
@@ -212,7 +248,7 @@ class Effect {
                 // 5-pointed star
                 const sx = cx;
                 const sy = cy;
-                const ss = scale;
+                const ss = scale * 1.3;
                 offCtx.beginPath();
                 for (let i = 0; i < 5; i++) {
                     const angle = (i * 4 * Math.PI) / 5 - Math.PI / 2;
@@ -319,7 +355,7 @@ window.addEventListener('click', () => {
 });
 
 function animate() {
-    ctx.fillStyle = 'rgba(0,0,0,0.1)';
+    ctx.fillStyle = 'rgba(0,0,0,0.05)';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     effect.render();
